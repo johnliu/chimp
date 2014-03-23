@@ -1,4 +1,5 @@
 from parser import Parser
+from interfacer import Communicator
 from monkey_interfacer import MonkeyCommunicator
 
 
@@ -11,8 +12,10 @@ def main(package, activity):
     parser = Parser()
     parser.collect_events()
 
-    monkey = MonkeyCommunicator(parser.events)
-    monkey.communicate()
+    # monkey = MonkeyCommunicator(parser.events)
+    # monkey.communicate()
+    communicator = Communicator(parser.events)
+    communicator.communicate()
 
 
 if __name__ == '__main__':

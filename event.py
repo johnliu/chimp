@@ -3,6 +3,7 @@ A class to represent an Android event.
 """
 
 from functools import partial
+from interfacer import Interface
 from monkey_interfacer import MonkeyInterface
 
 
@@ -46,14 +47,16 @@ class AndroidEvent(object):
         end_x, end_y = self.changes[TYPE_POSITION_X][-1], self.changes[TYPE_POSITION_Y][-1]
 
         if abs(start_x.value - end_x.value) <= 25 and abs(start_y.value - end_y.value) <= 25:
-            self.action = partial(MonkeyInterface.touch, start_x.value, start_y.value, 'MonkeyDevice.DOWN_AND_UP')
+            self.action = partial(Interface.touch, start_x.value, start_y.value)
+            # self.action = partial(MonkeyInterface.touch, start_x.value, start_y.value, 'MonkeyDevice.DOWN_AND_UP')
             self.action_type = ACTION_TOUCH
         else:
             start = (start_x.value, start_y.value)
             end = (end_x.value, end_y.value)
             duration = max(end_x.duration, end_y.duration)
             steps = 4
-            self.action = partial(MonkeyInterface.drag, start, end, duration, steps)
+            # self.action = partial(MonkeyInterface.drag, start, end, duration, steps)
+            self.action = partial(Interface.drag, start, end, duration)
             self.action_type = ACTION_DRAG
 
         self.processed = True
