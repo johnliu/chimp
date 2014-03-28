@@ -1,5 +1,4 @@
-from parser import Parser
-from interfacer import Communicator
+from interfacer import Communicator, Parser
 from uiautomator import device
 
 
@@ -17,8 +16,8 @@ def main(package, activity):
     parser = Parser()
     parser.collect_events()
     parser.post_process_events()
-    # communicator = Communicator(parser.events)
-    # communicator.communicate()
+    communicator = Communicator(parser.events)
+    communicator.communicate()
 
 
 if __name__ == '__main__':

@@ -7,7 +7,7 @@ We then parse and store the event data.
 
 import sys
 import uiautomator as ui
-from event import AndroidEvent, TYPE_START_OR_END
+from event import AndroidEvent
 from subprocess import PIPE, Popen
 from threading import Thread
 from Queue import Queue, Empty

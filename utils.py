@@ -1,6 +1,7 @@
 """
 Utility classes and methods.
 """
+
 from collections import namedtuple
 
 

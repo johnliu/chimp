@@ -1,0 +1,14 @@
+"""
+Shared constants in the module.
+"""
+
+# Event Types
+ACTION_TOUCH = 'touch'
+ACTION_DRAG = 'drag'
+
+# Event Properties
+TYPE_START_OR_END = 'ABS_MT_TRACKING_ID'
+TYPE_POSITION_X = 'ABS_MT_POSITION_X'
+TYPE_POSITION_Y = 'ABS_MT_POSITION_Y'
+EVENT_TYPES = [TYPE_POSITION_X, TYPE_POSITION_Y]
+
