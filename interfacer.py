@@ -9,6 +9,7 @@ from uiautomator import device
 class Interface(object):
     @classmethod
     def drag(cls, start, end, duration):
+        step_size = 25.0 / 1000
         device.drag(start[0], start[1], end[0], end[1], int(duration / step_size))
 
     @classmethod

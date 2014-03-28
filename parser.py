@@ -6,8 +6,9 @@ We then parse and store the event data.
 """
 
 import sys
+import uiautomator as ui
 from event import AndroidEvent, TYPE_START_OR_END
-from subprocess import PIPE, Popen, call
+from subprocess import PIPE, Popen
 from threading import Thread
 from Queue import Queue, Empty
 
@@ -16,44 +17,43 @@ class Parser(object):
     def __init__(self):
         self.raw_data_queue = Queue()
         self.events = Queue()
+        self.current_event = AndroidEvent()
+        self.previous_state = None
 
-    def _process_line(self, line, current_event):
-        # Ignore empty lines
-        if not line:
-            return current_event
-
-        # Ignore device add events.
-        if line.startswith('add device') or line.startswith('name'):
-            return current_event
+    def preprocess_line(self, line):
+        # Ignore empty lines and device add events.
+        if not line or line.startswith('add device') or line.startswith('name'):
+            return
 
         # Parse the events now in the correct form.
         # Specifically, the output should be in the form:
-        # [%time] %device: %event_type %event_property %value
-
+        # [%time] %device: %event_code %event_property %value
         line_parts = line.split()
         time = float(line_parts[1][:-1])  # '54000.123132]'
-        device = line_parts[2][:-1]  # '/dev/input/event1:'
-        event_type = line_parts[3]
+        input_device = line_parts[2][:-1]  # '/dev/input/event1:'
+        event_code = line_parts[3]
         event_property = line_parts[4]
         value = int(line_parts[5], 16)
 
         # Ignore separator events
-        if event_type == 'EV_SYN':
-            return current_event
+        if event_code == 'EV_SYN':
+            return
 
-        if current_event is None and event_property == TYPE_START_OR_END:
-            current_event = AndroidEvent(time)
-        elif current_event and event_property == TYPE_START_OR_END:
-            current_event.process()
-            self.events.put(current_event)
-            current_event = None
-        elif current_event and AndroidEvent.recognized(event_property):
-            current_event.changed(event_property, time, value)
-        else:
-            # Unrecognized event type.
-            pass
+        event = self.current_event
+        if event.is_start(event_property):
+            event.init(time, self.previous_state)
+        elif event.is_end(event_property):
+            event.preprocess(self.previous_state)
+            self.events.put(event)
+            event = AndroidEvent()
+        elif AndroidEvent.recognized(event_property):
+            event.changed(event_property, time, value)
 
-        return current_event
+        # Re set the current event.
+        self.current_event = event
+
+    def post_process_events(self):
+        pass
 
     def collect_events(self):
         on_posix = 'posix' in sys.builtin_module_names
@@ -71,11 +71,11 @@ class Parser(object):
         try:
             # Process the events in this thread.
             print 'Processing android events from device:'
-            current_event = None
+            self.previous_state = ui.device.dump()
             while True:
                 try:
                     line = self.raw_data_queue.get_nowait().strip()
-                    current_event = self._process_line(line, current_event)
+                    self.preprocess_line(line)
                 except Empty:
                     # Ignore empty events, we're simply reading too quickly.
                     pass

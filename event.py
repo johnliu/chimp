@@ -2,93 +2,178 @@
 A class to represent an Android event.
 """
 
+from collections import namedtuple
 from functools import partial
+from enum import IntEnum
 from interfacer import Interface
 from monkey_interfacer import MonkeyInterface
 
 
+# Event Properties
 TYPE_START_OR_END = 'ABS_MT_TRACKING_ID'
 TYPE_POSITION_X = 'ABS_MT_POSITION_X'
 TYPE_POSITION_Y = 'ABS_MT_POSITION_Y'
-_EVENT_TYPES = [TYPE_POSITION_X, TYPE_POSITION_Y]
+EVENT_TYPES = [TYPE_POSITION_X, TYPE_POSITION_Y]
 
+# Event Types
 ACTION_TOUCH = 'touch'
 ACTION_DRAG = 'drag'
 
 
+Point = namedtuple('Point', ['x', 'y'])
+State = namedtuple('State', ['start', 'end'])
+
+
+class Status(IntEnum):
+    uninitialized = 1
+    initialized = 2
+    preprocessed = 3
+    processed = 4
+
+
+class Action(object):
+    def __init__(self):
+        self.type = None
+        self.call = None
+
+    def init(self, type, *args):
+        self.type = type
+        if type == ACTION_TOUCH:
+            self.call = partial(AndroidEvent.interfacer.touch, *args)
+        elif type == ACTION_DRAG:
+            self.call = partial(AndroidEvent.interfacer.drag, *args)
+        else:
+            print 'Unknown action type.'
+        return self
+
+    def is_drag(self):
+        return self.type == ACTION_DRAG
+
+    def is_touch(self):
+        return self.type == ACTION_TOUCH
+
+
+class Change(object):
+    def __init__(self, type, duration, time, value):
+        self.type = type
+        self.duration = duration
+        self.time = time
+        self.value = value
+
+
+class ChangeStore(object):
+    def __init__(self):
+        self.changes = {}
+
+    def append(self, change):
+        self.changes.setdefault(change.type, [])
+        self.changes[change.type].append(change)
+
+    def x(self, index):
+        return self.changes[TYPE_POSITION_X][index]
+
+    def y(self, index):
+        return self.changes[TYPE_POSITION_Y][index]
+
+    def duration(self):
+        return max(self.x(-1).duration, self.y(-1).duration)
+
+    def max_time(self):
+        return max([self.changes[change_type][-1].time for change_type in self.changes])
+
+    def min_time(self):
+        return min([self.changes[change_type][0].time for change_type in self.changes])
+
+
 class AndroidEvent(object):
-    class Change:
-        def __init__(self, event_type, duration, time, value):
-            self.event_type = event_type
-            self.duration = duration
-            self.time = time
-            self.value = value
-            self.action = None
+    # Set the interfacer
+    interfacer = Interface
+
+    def __init__(self):
+        self.status = Status.uninitialized
+        self.start_time = None
+        self.state = State(None, None)
+        self.changes = ChangeStore()
+        self.action = Action()
+        self.element_chain = []
+
+    def init(self, start_time, start_state):
+        self.status = Status.initialized
+        self.start_time = start_time
+        self.state = State(start_state, None)
+        return self
+
+    def is_start(self, event_property):
+        return self.status is Status.uninitialized and event_property == TYPE_START_OR_END
+
+    def is_end(self, event_property):
+        return self.status is Status.initialized and event_property == TYPE_START_OR_END
 
     @classmethod
-    def recognized(cls, event_type):
-        return event_type in _EVENT_TYPES
+    def recognized(cls, type):
+        return type in EVENT_TYPES
 
-    def __init__(self, start_time):
-        self.processed = False
-        self.start_time = start_time
-        self.changes = {}
-        self.action = None
-        self.action_type = ''
-
-    def changed(self, event_type, time, value):
+    def changed(self, type, time, value):
         delta_time = time - self.start_time
-        self.changes.setdefault(event_type, [])
-        self.changes[event_type].append(AndroidEvent.Change(event_type, delta_time, time, value))
+        self.changes.append(Change(type, delta_time, time, value))
 
-    def process(self):
+    def preprocess(self, end_event):
+        self.state = State(self.state.start, end_event)
+
         # TODO(johnliu): interpolate a curve, for now just use start and end points.
-        start_x, start_y = self.changes[TYPE_POSITION_X][0], self.changes[TYPE_POSITION_Y][0]
-        end_x, end_y = self.changes[TYPE_POSITION_X][-1], self.changes[TYPE_POSITION_Y][-1]
+        start = Point(self.changes.x(0).value, self.changes.y(0).value)
+        end = Point(self.changes.x(-1).value, self.changes.y(-1).value)
 
-        if abs(start_x.value - end_x.value) <= 25 and abs(start_y.value - end_y.value) <= 25:
-            self.action = partial(Interface.touch, start_x.value, start_y.value)
-            # self.action = partial(MonkeyInterface.touch, start_x.value, start_y.value, 'MonkeyDevice.DOWN_AND_UP')
-            self.action_type = ACTION_TOUCH
+        if abs(start.x - end.x) <= 25 and abs(start.y - end.y) <= 25:
+            self.action.init(ACTION_TOUCH, start.x, start.y)
         else:
-            start = (start_x.value, start_y.value)
-            end = (end_x.value, end_y.value)
-            duration = max(end_x.duration, end_y.duration)
-            steps = 4
-            # self.action = partial(MonkeyInterface.drag, start, end, duration, steps)
-            self.action = partial(Interface.drag, start, end, duration)
-            self.action_type = ACTION_DRAG
+            self.action.init(ACTION_DRAG, start, end, self.changes.duration())
 
-        self.processed = True
+        self.status = Status.preprocessed
         print 'Got event: %s' % self
 
-    def delay(self, two):
-        if two is None:
+    def process(self):
+        self.status = Status.processed
+
+    def delay(self, other):
+        if other is None:
             return 0
-        start_time = max([self.changes[change_type][-1].time for change_type in self.changes])
-        end_time = min([two.changes[change_type][0].time for change_type in two.changes])
+        start_time = self.changes.max_time()
+        end_time = other.changes.min_time()
         return abs(end_time - start_time)
 
     def call(self):
-        if self.processed:
-            self.action()
+        if self.status >= Status.preprocessed:
+            self.action.call()
         else:
             print 'Event not processed.'
 
     def __repr__(self):
-        start_x, start_y = self.changes[TYPE_POSITION_X][0], self.changes[TYPE_POSITION_Y][0]
-        end_x, end_y = self.changes[TYPE_POSITION_X][-1], self.changes[TYPE_POSITION_Y][-1]
+        text_start = '<AndroidEvent(%s)>'
+        text_end = ':\n %s'
+        t, m = (None, None)
 
-        # Determine the arguments
-        start = (start_x.value, start_y.value)
-        end = (end_x.value, end_y.value)
-        duration = max(end_x.duration, end_y.duration)
+        if self.status is Status.uninitialized:
+            t = 'null'
+        if self.status is Status.initialized:
+            t = 'unprocessed'
 
-        message = 'unprocessed'
-        if self.processed:
-            if self.action_type == ACTION_DRAG:
-                message = '%s -> %s in %f' % (start, end, duration)
-            elif self.action_type == ACTION_TOUCH:
-                message = '%s' % (start,)
+        start = Point(self.changes.x(0).value, self.changes.y(0).value)
+        end = Point(self.changes.x(-1).value, self.changes.y(-1).value)
+        duration = self.changes.duration()
 
-        return '<AndroidEvent(%s): %s>.' % (self.action_type, message)
+        if self.status >= Status.preprocessed:
+            t = self.action.type
+            if self.action.is_drag():
+                m = '\t%s ->\n\t%s \n\tin %f' % (start, end, duration)
+            elif self.action.is_touch():
+                m = '\t%s' % (start,)
+        if self.status is Status.processed:
+            if self.action.is_drag():
+                m += ', \n\tfrom: %s ->\n\t%s' % (self.element_chain[0], self.element_chain[-1])
+            elif self.action.is_touch():
+                m += ', \n\tin: %s' % self.element_chain[0]
+
+        text = text_start
+        if m: text += text_end
+        return text % (t, m)

@@ -7,6 +7,7 @@ import time
 from subprocess import Popen, PIPE
 from threading import Thread
 from Queue import Queue, Empty
+from interfacer import Interface, Communicator
 
 
 def try_call(func):
@@ -18,23 +19,23 @@ def try_call(func):
     return wrapped
 
 
-class MonkeyInterface(object):
+class MonkeyInterface(Interface):
     write = None
 
     @classmethod
     @try_call
-    def drag(cls, start, end, duration, steps):
+    def drag(cls, start, end, duration, steps=4):
         cls.write('drag(%s, %s, %f, %d)' % (start, end, duration, steps))
 
     @classmethod
     @try_call
-    def touch(cls, x, y, type):
+    def touch(cls, x, y, type='MonkeyDevice.DOWN_AND_UP'):
         cls.write('touch(%d, %d, %s)' % (x, y, type))
 
 
-class MonkeyCommunicator(object):
+class MonkeyCommunicator(Communicator):
     def __init__(self, events):
-        self.events = events
+        super(MonkeyCommunicator, self).__init__(events)
         self.output = Queue()
 
     def communicate(self):
@@ -78,7 +79,7 @@ class MonkeyCommunicator(object):
         # write("run_component = package + '/' + package + '.' + activity")
         # write('device.startActivity(component=run_component)')
 
-        MonkeyInterface.write = staticmethod(lambda command: write('%s.%s' % ('device', command)))
+        MonkeyInterface.write = staticmethod(lambda command: write('device.%s' % command))
         last_event = None
         while True:
             try:

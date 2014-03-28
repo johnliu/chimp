@@ -1,6 +1,6 @@
 from parser import Parser
 from interfacer import Communicator
-from monkey_interfacer import MonkeyCommunicator
+from uiautomator import device
 
 
 def main(package, activity):
@@ -9,11 +9,13 @@ def main(package, activity):
     activity - the name of the activity to start, e.g. 'StartActivity'
     """
 
+    # Ensure the device is connected.
+    print "Connecting.."
+    info = device.info
+    print "Connected." if info else "Unable to connect."
+
     parser = Parser()
     parser.collect_events()
-
-    # monkey = MonkeyCommunicator(parser.events)
-    # monkey.communicate()
     communicator = Communicator(parser.events)
     communicator.communicate()
 
