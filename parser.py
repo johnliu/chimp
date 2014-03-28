@@ -53,7 +53,15 @@ class Parser(object):
         self.current_event = event
 
     def post_process_events(self):
-        pass
+        preprocessed = self.events
+        processed = Queue()
+
+        while not preprocessed.empty():
+            event = preprocessed.get()
+            event.process()
+            processed.put(event)
+
+        self.events = processed
 
     def collect_events(self):
         on_posix = 'posix' in sys.builtin_module_names

@@ -3,9 +3,12 @@ A class to represent an Android event.
 """
 
 from collections import namedtuple
-from functools import partial
 from enum import IntEnum
+from functools import partial
+from xml.etree import ElementTree as ET
 from interfacer import Interface
+from parse import *
+from utils import Point, Rect
 from monkey_interfacer import MonkeyInterface
 
 
@@ -20,8 +23,40 @@ ACTION_TOUCH = 'touch'
 ACTION_DRAG = 'drag'
 
 
-Point = namedtuple('Point', ['x', 'y'])
-State = namedtuple('State', ['start', 'end'])
+class State(object):
+    class Node(object):
+        def __init__(self, element):
+            attr = element.attrib
+            self.id = '%s/%s' % (attr.get('class'), attr.get('resource-id'))
+            self.bounds = Rect(*parse('[{:d},{:d}][{:d},{:d}]', attr.get('bounds')))
+
+        def __repr__(self):
+            return '<Element(%s)>' % self.id
+
+    def __init__(self):
+        self.start = None
+        self.start_chain = []
+        self.end = None
+        self.end_chain = []
+
+    def process(self, string, chain, point):
+        # TODO(johnliu): Check for touches outside of boundary.
+        root = ET.fromstring(string.encode('utf-8'))
+        children = list(root)
+
+        while children:
+            for child in children:
+                node = State.Node(child)
+                if point in node.bounds:
+                    children = list(child)
+                    chain.append(node)
+                    break
+
+    def process_start(self, point):
+        self.process(self.start, self.start_chain, point)
+
+    def process_end(self, point):
+        self.process(self.end, self.end_chain, point)
 
 
 class Status(IntEnum):
@@ -75,6 +110,12 @@ class ChangeStore(object):
     def y(self, index):
         return self.changes[TYPE_POSITION_Y][index]
 
+    def start(self):
+        return Point(self.x(0).value, self.y(0).value)
+
+    def end(self):
+        return Point(self.x(-1).value, self.y(-1).value)
+
     def duration(self):
         return max(self.x(-1).duration, self.y(-1).duration)
 
@@ -92,15 +133,14 @@ class AndroidEvent(object):
     def __init__(self):
         self.status = Status.uninitialized
         self.start_time = None
-        self.state = State(None, None)
+        self.state = State()
         self.changes = ChangeStore()
         self.action = Action()
-        self.element_chain = []
 
     def init(self, start_time, start_state):
         self.status = Status.initialized
         self.start_time = start_time
-        self.state = State(start_state, None)
+        self.state.start = start_state
         return self
 
     def is_start(self, event_property):
@@ -118,22 +158,26 @@ class AndroidEvent(object):
         self.changes.append(Change(type, delta_time, time, value))
 
     def preprocess(self, end_event):
-        self.state = State(self.state.start, end_event)
+        self.status = Status.preprocessed
+        self.state.end = end_event
 
         # TODO(johnliu): interpolate a curve, for now just use start and end points.
-        start = Point(self.changes.x(0).value, self.changes.y(0).value)
-        end = Point(self.changes.x(-1).value, self.changes.y(-1).value)
+        start = self.changes.start()
+        end = self.changes.end()
 
         if abs(start.x - end.x) <= 25 and abs(start.y - end.y) <= 25:
             self.action.init(ACTION_TOUCH, start.x, start.y)
         else:
             self.action.init(ACTION_DRAG, start, end, self.changes.duration())
 
-        self.status = Status.preprocessed
         print 'Got event: %s' % self
 
     def process(self):
         self.status = Status.processed
+        self.state.process_start(self.changes.start())
+        self.state.process_end(self.changes.end())
+
+        print 'Processed: %s' % self
 
     def delay(self, other):
         if other is None:
@@ -143,7 +187,7 @@ class AndroidEvent(object):
         return abs(end_time - start_time)
 
     def call(self):
-        if self.status >= Status.preprocessed:
+        if self.status >= Status.processed:
             self.action.call()
         else:
             print 'Event not processed.'
@@ -158,8 +202,8 @@ class AndroidEvent(object):
         if self.status is Status.initialized:
             t = 'unprocessed'
 
-        start = Point(self.changes.x(0).value, self.changes.y(0).value)
-        end = Point(self.changes.x(-1).value, self.changes.y(-1).value)
+        start = self.changes.start()
+        end = self.changes.end()
         duration = self.changes.duration()
 
         if self.status >= Status.preprocessed:
@@ -170,9 +214,9 @@ class AndroidEvent(object):
                 m = '\t%s' % (start,)
         if self.status is Status.processed:
             if self.action.is_drag():
-                m += ', \n\tfrom: %s ->\n\t%s' % (self.element_chain[0], self.element_chain[-1])
+                m += ', \n\tfrom: %s ->\n\t%s' % (self.state.start_chain[-1], self.state.end_chain[-1])
             elif self.action.is_touch():
-                m += ', \n\tin: %s' % self.element_chain[0]
+                m += ', \n\tin: %s' % self.state.start_chain[-1]
 
         text = text_start
         if m: text += text_end
