@@ -2,11 +2,11 @@
 A class to represent an Android event.
 """
 
+from enum import IntEnum
+from state import StateChange
 from action import Action
 from change import ChangeStore, AndroidEventChange
-from state import State
 from constants import *
-from enum import IntEnum
 
 
 class Status(IntEnum):
@@ -20,14 +20,14 @@ class AndroidEvent(object):
     def __init__(self):
         self.status = Status.uninitialized
         self.start_time = None
-        self.state = State()
+        self.state = StateChange()
         self.changes = ChangeStore()
         self.action = Action()
 
     def init(self, start_time, start_state):
         self.status = Status.initialized
         self.start_time = start_time
-        self.state.start = start_state
+        self.state.start.xml = start_state
         return self
 
     def is_start(self, event_property):
@@ -46,7 +46,7 @@ class AndroidEvent(object):
 
     def preprocess(self, end_event):
         self.status = Status.preprocessed
-        self.state.end = end_event
+        self.state.end.xml = end_event
 
         # TODO(johnliu): interpolate a curve, for now just use start and end points.
         start = self.changes.start()
@@ -61,8 +61,8 @@ class AndroidEvent(object):
 
     def process(self):
         self.status = Status.processed
-        self.state.process_start(self.changes.start())
-        self.state.process_end(self.changes.end())
+        self.state.start.process(self.changes.start())
+        self.state.end.process(self.changes.end())
 
         print 'Processed: %s' % self
 
@@ -101,9 +101,9 @@ class AndroidEvent(object):
                 m = '\t%s' % (start,)
         if self.status is Status.processed:
             if self.action.is_drag():
-                m += ', \n\tfrom: %s ->\n\t%s' % (self.state.start_chain[-1], self.state.end_chain[-1])
+                m += ', \n\tfrom: %s ->\n\t%s' % (self.state.start.chain[-1], self.state.end.chain[-1])
             elif self.action.is_touch():
-                m += ', \n\tin: %s' % self.state.start_chain[-1]
+                m += ', \n\tin: %s' % self.state.start.chain[-1]
 
         text = text_start
         if m: text += text_end

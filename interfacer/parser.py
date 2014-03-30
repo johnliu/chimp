@@ -52,7 +52,7 @@ class Parser(object):
         # Re set the current event.
         self.current_event = event
 
-    def post_process_events(self):
+    def process_events(self):
         preprocessed = self.events
         processed = Queue()
 

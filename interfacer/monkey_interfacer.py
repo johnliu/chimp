@@ -84,7 +84,7 @@ class MonkeyCommunicator(Communicator):
         while True:
             try:
                 event = self.events.get_nowait()
-                time.sleep(event.delay(last_event))
+                time.sleep(min(3, event.delay(last_event)))
                 print event
 
                 event.call()

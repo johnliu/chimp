@@ -1,8 +1,8 @@
 """
 Interface to communicate with the device using uiautomator.
 """
-import time
 
+import time
 from uiautomator import device
 
 
@@ -25,7 +25,7 @@ class Communicator(object):
         last_event = None
         while not self.events.empty():
             event = self.events.get()
-            time.sleep(event.delay(last_event))
+            time.sleep(min(3, event.delay(last_event)))
             print event
 
             event.call()
