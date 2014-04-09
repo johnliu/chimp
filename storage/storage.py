@@ -8,6 +8,7 @@ import time
 import types
 import copy_reg
 from Queue import Queue
+from event import Status
 
 
 class GenericStorage(object):
@@ -51,7 +52,10 @@ class EventStorage(GenericStorage):
 
     def write(self, obj, name=None):
         name = name if name else str(int(time.time() * 1000))
-        super(EventStorage, self).write(obj, name)
+        if obj.status is not Status.discarded:
+            super(EventStorage, self).write(obj, name)
+        else:
+            print 'Skipped discarded event.'
 
     def write_all(self, events):
         for event in events:

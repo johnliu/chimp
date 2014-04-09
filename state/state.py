@@ -5,6 +5,7 @@ Classes representing the UI state of an event.
 from xml.etree import ElementTree as ET
 from parse import parse
 from utils import Rect
+from collections import deque
 
 
 class StateChange(object):
@@ -43,3 +44,41 @@ class State(object):
                     children = list(child)
                     self.chain.append(node)
                     break
+            else:
+                print 'Could not find an element.'
+                break
+
+    def as_list(self, symbols, append=True):
+        root = ET.fromstring(self.xml.encode('utf-8'))
+        queue = deque(list(root))
+
+        data = [0] * len(symbols)
+        while queue:
+            child = queue.popleft()
+            node = Node(child)
+
+            if node.cls:
+                if node.cls not in symbols and append:
+                    symbols[node.cls] = len(symbols)
+                    data.append(0)
+
+                try:
+                    index = symbols[node.cls]
+                    data[index] = 1
+                except KeyError:
+                    pass
+
+            if node.rid:
+                if node.rid not in symbols and append:
+                    symbols[node.rid] = len(symbols)
+                    data.append(0)
+
+                try:
+                    index = symbols[node.rid]
+                    data[index] = 1
+                except KeyError:
+                    pass
+
+            queue.extend(list(child))
+
+        return data

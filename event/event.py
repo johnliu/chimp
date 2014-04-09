@@ -6,10 +6,12 @@ from enum import IntEnum
 from state import StateChange
 from action import Action
 from change import ChangeStore, AndroidEventChange
+from uiautomator import device
 from constants import *
 
 
 class Status(IntEnum):
+    discarded = 0
     uninitialized = 1
     initialized = 2
     preprocessed = 3
@@ -23,6 +25,7 @@ class AndroidEvent(object):
         self.state = StateChange()
         self.changes = ChangeStore()
         self.action = Action()
+        self.device_info = device.info
 
     def init(self, start_time, start_state):
         self.status = Status.initialized
@@ -41,28 +44,46 @@ class AndroidEvent(object):
         return type in EVENT_TYPES
 
     def changed(self, type, time, value):
-        delta_time = time - self.start_time
-        self.changes.append(AndroidEventChange(type, delta_time, time, value))
+        if self.status is Status.initialized:
+            delta_time = time - self.start_time
+            self.changes.append(AndroidEventChange(type, delta_time, time, value))
+        else:
+            print 'Ignored uninitialized event.'
 
     def preprocess(self, end_event):
-        self.status = Status.preprocessed
-        self.state.end.xml = end_event
+        try:
+            self.status = Status.preprocessed
+            self.state.end.xml = end_event
 
-        # TODO(johnliu): interpolate a curve, for now just use start and end points.
-        start = self.changes.start()
-        end = self.changes.end()
+            # TODO(johnliu): interpolate a curve, for now just use start and end points.
+            start = self.changes.start()
+            end = self.changes.end()
 
-        if abs(start.x - end.x) <= 25 and abs(start.y - end.y) <= 25:
-            self.action.init(ACTION_TOUCH, start.x, start.y)
-        else:
-            self.action.init(ACTION_DRAG, start, end, self.changes.duration())
+            if abs(start.x - end.x) <= 25 and abs(start.y - end.y) <= 25:
+                if start.y >= self.device_info['displayHeight']:
+                    self.action.init(ACTION_BACK)
+                else:
+                    self.action.init(ACTION_TOUCH, start.x, start.y)
+            else:
+                self.action.init(ACTION_DRAG, start, end, self.changes.duration())
+        except Exception as e:
+            self.status = Status.discarded
+            print e
 
         print 'Got event: %s' % self
 
     def process(self):
-        self.status = Status.processed
-        self.state.start.process(self.changes.start())
-        self.state.end.process(self.changes.end())
+        try:
+            self.status = Status.processed
+
+            if not self.action.is_back():
+                self.state.start.process(self.changes.start())
+                self.state.end.process(self.changes.end())
+                if not len(self.state.start.chain) or not len(self.state.end.chain):
+                    self.status = Status.discarded
+        except Exception as e:
+            self.status = Status.discarded
+            print e
 
         print 'Processed: %s' % self
 
@@ -86,14 +107,16 @@ class AndroidEvent(object):
 
         if self.status is Status.uninitialized:
             t = 'null'
+        if self.status is Status.discarded:
+            t = 'discarded'
         if self.status is Status.initialized:
             t = 'unprocessed'
 
-        start = self.changes.start()
-        end = self.changes.end()
-        duration = self.changes.duration()
-
         if self.status >= Status.preprocessed:
+            start = self.changes.start()
+            end = self.changes.end()
+            duration = self.changes.duration()
+
             t = self.action.type
             if self.action.is_drag():
                 m = '\t%s ->\n\t%s \n\tin %f' % (start, end, duration)
@@ -106,5 +129,5 @@ class AndroidEvent(object):
                 m += ', \n\tin: %s' % self.state.start.chain[-1]
 
         text = text_start
-        if m: text += text_end
-        return text % (t, m)
+        if m: text += text_end % m
+        return text % t

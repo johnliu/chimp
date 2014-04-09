@@ -5,6 +5,7 @@ Shared constants in the module.
 # Event Types
 ACTION_TOUCH = 'touch'
 ACTION_DRAG = 'drag'
+ACTION_BACK = 'back'
 
 # Event Properties
 TYPE_START_OR_END = 'ABS_MT_TRACKING_ID'

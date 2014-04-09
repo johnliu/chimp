@@ -34,9 +34,12 @@ class MonkeyInterface(Interface):
 
 
 class MonkeyCommunicator(Communicator):
-    def __init__(self, events):
-        super(MonkeyCommunicator, self).__init__(events)
+    def __init__(self):
+        super(MonkeyCommunicator, self).__init__()
         self.output = Queue()
+
+    def init(self, events):
+        return super(MonkeyCommunicator, self).init(events)
 
     def communicate(self):
         on_posix = 'posix' in sys.builtin_module_names

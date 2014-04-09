@@ -43,6 +43,7 @@ class Parser(object):
         if event.is_start(event_property):
             event.init(time, self.previous_state)
         elif event.is_end(event_property):
+            self.previous_state = ui.device.dump()
             event.preprocess(self.previous_state)
             self.events.put(event)
             event = AndroidEvent()

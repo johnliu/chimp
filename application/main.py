@@ -1,4 +1,5 @@
 from interfacer import Communicator, Parser
+from learning import Model
 from storage import EventStorage
 from uiautomator import device
 
@@ -25,8 +26,12 @@ def main(package):
     events = storage.qread()
 
     # Generate a model for this.
-    communicator = Communicator(events)
-    communicator.communicate()
+    model = Model()
+    model.parse_events(events)
+    model.train()
+
+    communicator = Communicator()
+    communicator.automate(model)
 
 
 if __name__ == '__main__':
